@@ -87,12 +87,20 @@
                 }
             }
         },
+        "def_publishedDate": {
+           "type": "string"
+        },
+        "def_lastModifiedDate": {
+           "type": "string"
+        },
         "def_cve_item": {
             "description": "Defines a vulnerability in the NVD data feed.",
             "properties": {
                 "cve": {"$ref": "CVE_JSON_4.0_min_1.1.schema"},
                 "configurations": {"$ref": "#/definitions/def_configurations"},
-                "impact": {"$ref": "#/definitions/def_impact"}
+                "impact": {"$ref": "#/definitions/def_impact"},
+                "publishedDate": {"$ref": "#/definitions/def_publishedDate"},
+                "lastModifiedDate": {"$ref": "#/definitions/def_lastModifiedDate"}
             },
             "required": ["cve"]
         }

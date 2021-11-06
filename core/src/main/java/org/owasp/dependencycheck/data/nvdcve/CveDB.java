@@ -18,15 +18,34 @@
 package org.owasp.dependencycheck.data.nvdcve;
 //CSOFF: AvoidStarImport
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import org.apache.commons.collections.map.ReferenceMap;
-import org.owasp.dependencycheck.dependency.Vulnerability;
-import org.owasp.dependencycheck.dependency.VulnerableSoftware;
-import org.owasp.dependencycheck.utils.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static org.apache.commons.collections.map.AbstractReferenceMap.HARD;
+import static org.apache.commons.collections.map.AbstractReferenceMap.SOFT;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.ADD_DICT_CPE;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.CLEANUP_ORPHANS;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.COUNT_CPE;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.DELETE_UNUSED_DICT_CPE;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.DELETE_VULNERABILITY;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.INSERT_CWE;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.INSERT_PROPERTY;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.INSERT_REFERENCE;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.INSERT_SOFTWARE;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.MERGE_CPE_ECOSYSTEM;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.MERGE_PROPERTY;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.SELECT_CPE_ECOSYSTEM;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.SELECT_CPE_ENTRIES;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.SELECT_CVE_FROM_SOFTWARE;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.SELECT_PROPERTIES;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.SELECT_REFERENCES;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.SELECT_SOFTWARE;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.SELECT_VENDOR_PRODUCT_LIST;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.SELECT_VENDOR_PRODUCT_LIST_FOR_NODE;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.SELECT_VULNERABILITY;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.SELECT_VULNERABILITY_CWE;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.UPDATE_ECOSYSTEM;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.UPDATE_ECOSYSTEM2;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.UPDATE_PROPERTY;
+import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.UPDATE_VULNERABILITY;
 
-import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.sql.CallableStatement;
 import java.sql.Connection;
@@ -34,11 +53,27 @@ import java.sql.JDBCType;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.*;
+import java.sql.Timestamp;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.MissingResourceException;
+import java.util.Properties;
+import java.util.ResourceBundle;
+import java.util.Set;
 import java.util.stream.Collectors;
 
-import static org.apache.commons.collections.map.AbstractReferenceMap.HARD;
-import static org.apache.commons.collections.map.AbstractReferenceMap.SOFT;
+import javax.annotation.concurrent.ThreadSafe;
+
+import org.apache.commons.collections.map.ReferenceMap;
 import org.owasp.dependencycheck.analyzer.exception.LambdaExceptionWrapper;
 import org.owasp.dependencycheck.analyzer.exception.UnexpectedAnalysisException;
 import org.owasp.dependencycheck.data.nvd.json.BaseMetricV2;
@@ -50,12 +85,20 @@ import org.owasp.dependencycheck.data.nvd.json.LangString;
 import org.owasp.dependencycheck.data.nvd.json.NodeFlatteningCollector;
 import org.owasp.dependencycheck.data.nvd.json.ProblemtypeDatum;
 import org.owasp.dependencycheck.data.nvd.json.Reference;
-import static org.owasp.dependencycheck.data.nvdcve.CveDB.PreparedStatementCveDb.*;
 import org.owasp.dependencycheck.data.update.cpe.CpeEcosystemCache;
 import org.owasp.dependencycheck.data.update.cpe.CpePlus;
 import org.owasp.dependencycheck.dependency.CvssV2;
 import org.owasp.dependencycheck.dependency.CvssV3;
+import org.owasp.dependencycheck.dependency.Vulnerability;
+import org.owasp.dependencycheck.dependency.VulnerableSoftware;
 import org.owasp.dependencycheck.dependency.VulnerableSoftwareBuilder;
+import org.owasp.dependencycheck.utils.InvalidSettingException;
+import org.owasp.dependencycheck.utils.Pair;
+import org.owasp.dependencycheck.utils.Settings;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import us.springett.parsers.cpe.Cpe;
 import us.springett.parsers.cpe.CpeBuilder;
 import us.springett.parsers.cpe.CpeParser;
@@ -672,7 +715,7 @@ public final class CveDB implements AutoCloseable {
                     vuln.setSource(Vulnerability.Source.NVD);
                     vuln.setName(cve);
                     vuln.setDescription(rsV.getString(2));
-
+                    
                     //3.v2Severity, 4.v2ExploitabilityScore, 5.v2ImpactScore, 6.v2AcInsufInfo, 7.v2ObtainAllPrivilege,
                     //8.v2ObtainUserPrivilege, 9.v2ObtainOtherPrivilege, 10.v2UserInteractionRequired, 11.v2Score,
                     //12.v2AccessVector, 13.v2AccessComplexity, 14.v2Authentication, 15.v2ConfidentialityImpact,
@@ -697,6 +740,8 @@ public final class CveDB implements AutoCloseable {
                                 getFloatValue(rsV, 20), rsV.getString(31));
                         vuln.setCvssV3(cvss);
                     }
+//                    vuln.setPublishedDate(rsV.getTimestamp(32));
+//                    vuln.setLastModifiedDate(rsV.getTimestamp(33));
                 } else {
                     LOGGER.debug(cve + " does not exist in the database");
                     return null;
@@ -929,6 +974,14 @@ public final class CveDB implements AutoCloseable {
                 callUpdate.setNull(30, java.sql.Types.NULL);
                 callUpdate.setNull(31, java.sql.Types.NULL);
             }
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'H:mX");
+            try {
+				callUpdate.setTimestamp(32, new Timestamp(sdf.parse(cve.getPublishedDate()).getTime()));
+				callUpdate.setTimestamp(33, new Timestamp(sdf.parse(cve.getLastModifiedDate()).getTime()));
+			} catch (ParseException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
             if (isOracle) {
                 try {
                     final CallableStatement cs = (CallableStatement) callUpdate;

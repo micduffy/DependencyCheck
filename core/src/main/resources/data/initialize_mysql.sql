@@ -37,7 +37,7 @@ CREATE TABLE vulnerability (id int auto_increment PRIMARY KEY, cve VARCHAR(20) U
         v3ImpactScore DECIMAL(3,1), v3AttackVector VARCHAR(20), v3AttackComplexity VARCHAR(20), 
         v3PrivilegesRequired VARCHAR(20), v3UserInteraction VARCHAR(20), v3Scope VARCHAR(20), 
         v3ConfidentialityImpact VARCHAR(20), v3IntegrityImpact VARCHAR(20), v3AvailabilityImpact VARCHAR(20), 
-        v3BaseScore DECIMAL(3,1), v3BaseSeverity VARCHAR(20), v3Version VARCHAR(5));
+        v3BaseScore DECIMAL(3,1), v3BaseSeverity VARCHAR(20), v3Version VARCHAR(5), publishedDate TIMESTAMP, lastModifiedDate TIMESTAMP);
 
 CREATE TABLE `reference` (cveid INT, name VARCHAR(1000), url VARCHAR(1000), source VARCHAR(255),
 	CONSTRAINT fkReference FOREIGN KEY (cveid) REFERENCES vulnerability(id) ON DELETE CASCADE);
@@ -119,7 +119,7 @@ CREATE PROCEDURE update_vulnerability (
     IN p_v3AttackComplexity VARCHAR(20), IN p_v3PrivilegesRequired VARCHAR(20), IN p_v3UserInteraction VARCHAR(20), 
     IN p_v3Scope VARCHAR(20), IN p_v3ConfidentialityImpact VARCHAR(20), IN p_v3IntegrityImpact VARCHAR(20), 
     IN p_v3AvailabilityImpact VARCHAR(20), IN p_v3BaseScore DECIMAL(3,1), IN p_v3BaseSeverity VARCHAR(20), 
-    IN p_v3Version VARCHAR(5))
+    IN p_v3Version VARCHAR(5), IN p_publishedDate TIMESTAMP, IN p_lastModifiedDate TIMESTAMP)
 BEGIN
 DECLARE vulnerabilityId INT DEFAULT 0;
 
@@ -146,7 +146,7 @@ IF vulnerabilityId > 0 THEN
         `v3ExploitabilityScore`=p_v3ExploitabilityScore, `v3ImpactScore`=p_v3ImpactScore, `v3AttackVector`=p_v3AttackVector, 
         `v3AttackComplexity`=p_v3AttackComplexity, `v3PrivilegesRequired`=p_v3PrivilegesRequired, `v3UserInteraction`=p_v3UserInteraction, 
         `v3Scope`=p_v3Scope, `v3ConfidentialityImpact`=p_v3ConfidentialityImpact, `v3IntegrityImpact`=p_v3IntegrityImpact, 
-        `v3AvailabilityImpact`=p_v3AvailabilityImpact, `v3BaseScore`=p_v3BaseScore, `v3BaseSeverity`=p_v3BaseSeverity, `v3Version`=p_v3Version
+        `v3AvailabilityImpact`=p_v3AvailabilityImpact, `v3BaseScore`=p_v3BaseScore, `v3BaseSeverity`=p_v3BaseSeverity, `v3Version`=p_v3Version, `publishedDate`=p_publishedDate, `lastModifiedDate`=p_lastModifiedDate 
         WHERE id=vulnerabilityId;
 ELSE
     INSERT INTO vulnerability (`cve`, `description`, 
@@ -159,7 +159,7 @@ ELSE
         `v3ImpactScore`, `v3AttackVector`, `v3AttackComplexity`, 
         `v3PrivilegesRequired`, `v3UserInteraction`, `v3Scope`, 
         `v3ConfidentialityImpact`, `v3IntegrityImpact`, `v3AvailabilityImpact`, 
-        `v3BaseScore`, `v3BaseSeverity`, `v3Version`) 
+        `v3BaseScore`, `v3BaseSeverity`, `v3Version`, `publishedDate`, `lastModifiedDate`) 
         VALUES (p_cveId, p_description, 
         p_v2Severity, p_v2ExploitabilityScore, 
         p_v2ImpactScore, p_v2AcInsufInfo, p_v2ObtainAllPrivilege, 
@@ -170,7 +170,7 @@ ELSE
         p_v3ImpactScore, p_v3AttackVector, p_v3AttackComplexity, 
         p_v3PrivilegesRequired, p_v3UserInteraction, p_v3Scope, 
         p_v3ConfidentialityImpact, p_v3IntegrityImpact, p_v3AvailabilityImpact, 
-        p_v3BaseScore, p_v3BaseSeverity, p_v3Version);
+        p_v3BaseScore, p_v3BaseSeverity, p_v3Version, p_publishedDate, p_lastModifiedDate);
         
         SET vulnerabilityId = LAST_INSERT_ID();
 END IF;
